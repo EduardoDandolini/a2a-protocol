@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>br.com.talk.a2a</groupId>
+    <artifactId>quem-autorizou-esse-agente</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>demo-b-governed</artifactId>
+  <packaging>pom</packaging>
+  <name>Demo B - Cadeia governada</name>
+  <description>
+    Mesmo cenario da Demo A, com as tres lacunas fechadas. Tres aplicacoes Spring Boot
+    que conversam de verdade por A2A/HTTP: customer-service-agent (8081),
+    credit-agent (8082) e payment-agent (8083).
+  </description>
+
+  <modules>
+    <module>customer-service-agent</module>
+    <module>credit-agent</module>
+    <module>payment-agent</module>
+  </modules>
+</project>
