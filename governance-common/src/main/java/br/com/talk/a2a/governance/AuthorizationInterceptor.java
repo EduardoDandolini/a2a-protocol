@@ -84,6 +84,8 @@ public class AuthorizationInterceptor implements HandlerInterceptor {
             policyEngine.authorize(token, skillId, token.maxAmount()).orThrow();
 
             request.setAttribute(GovernanceContextKeys.SCOPE_TOKEN, token);
+            LOG.debug("trace={} agent={} skill={} borda OK: jti={} taskId={} scope={}",
+                    traceId, agentName, skillId, token.jti(), token.taskId(), token.scope());
             return true;
 
         } catch (AuthorizationDeniedException denied) {

@@ -116,19 +116,56 @@ public class A2AJsonRpcController {
         String method = envelope.get("method").getAsString();
         context.getState().put(JSONRPCContextKeys.METHOD_NAME_KEY, method);
 
+        // Contorna uma peculiaridade do SDK cliente oficial: mesmo no transporte JSON-RPC,
+        // SendMessage e serializado atraves do tipo protobuf gerado (ver
+        // JSONRPCTransport#sendMessage -> ProtoUtils.ToProto.sendMessageRequest). Como proto3
+        // nao distingue "campo ausente" de "string vazia", um Message.taskId() nulo — o caso
+        // normal de "estou criando uma task nova" — chega na malha como "taskId":"" em vez de
+        // simplesmente nao aparecer. O DefaultRequestHandler do SDK, porem, decide entre
+        // checkCreate/checkWrite testando so `taskId != null`: uma string vazia cai no ramo
+        // "mensagem para uma task EXISTENTE", tenta achar a task "" no TaskStore, nao encontra,
+        // e devolve TaskNotFoundError — mesmo com a autorizacao de criacao ja tendo passado.
+        // E exatamente o que quebrava o salto atendimento -> credito da Demo B: o
+        // A2AOutboundClient nunca define taskId (a task ainda nao existe do lado de la), mas o
+        // client do SDK "inventava" um "" na serializacao. Normalizamos aqui, na borda, antes
+        // de qualquer coisa do SDK ver o payload.
+        normalizeEmptyTaskId(envelope);
+        String normalizedBody = envelope.toString();
+
         return switch (method) {
             case A2AMethods.SEND_MESSAGE_METHOD ->
-                    jsonRpcHandler.onMessageSend(JsonUtil.fromJson(body, SendMessageRequest.class), context);
+                    jsonRpcHandler.onMessageSend(JsonUtil.fromJson(normalizedBody, SendMessageRequest.class), context);
             case A2AMethods.GET_TASK_METHOD ->
-                    jsonRpcHandler.onGetTask(JsonUtil.fromJson(body, GetTaskRequest.class), context);
+                    jsonRpcHandler.onGetTask(JsonUtil.fromJson(normalizedBody, GetTaskRequest.class), context);
             case A2AMethods.CANCEL_TASK_METHOD ->
-                    jsonRpcHandler.onCancelTask(JsonUtil.fromJson(body, CancelTaskRequest.class), context);
+                    jsonRpcHandler.onCancelTask(JsonUtil.fromJson(normalizedBody, CancelTaskRequest.class), context);
             case A2AMethods.LIST_TASK_METHOD ->
-                    jsonRpcHandler.onListTasks(JsonUtil.fromJson(body, ListTasksRequest.class), context);
+                    jsonRpcHandler.onListTasks(JsonUtil.fromJson(normalizedBody, ListTasksRequest.class), context);
             default -> new A2AErrorResponse(
                     envelope.has("id") ? envelope.get("id").getAsString() : null,
                     new MethodNotFoundError(null, "Unsupported method: " + method, null));
         };
+    }
+
+    /**
+     * Remove {@code params.message.taskId} quando vier como string vazia, restaurando a
+     * semantica de "task nova" que o cliente Java tinha antes de passar pela conversao
+     * protobuf interna do SDK. Ver o comentario em {@link #dispatch}.
+     */
+    private static void normalizeEmptyTaskId(JsonObject envelope) {
+        if (!envelope.has("params") || !envelope.get("params").isJsonObject()) {
+            return;
+        }
+        JsonObject params = envelope.getAsJsonObject("params");
+        if (!params.has("message") || !params.get("message").isJsonObject()) {
+            return;
+        }
+        JsonObject message = params.getAsJsonObject("message");
+        if (message.has("taskId") && message.get("taskId").isJsonPrimitive()
+                && message.get("taskId").getAsJsonPrimitive().isString()
+                && message.get("taskId").getAsString().isEmpty()) {
+            message.remove("taskId");
+        }
     }
 
     private String serialize(A2AResponse<?> response) {
